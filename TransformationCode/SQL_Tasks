@@ -1,0 +1,61 @@
+-- Set up TASKADMIN role
+use role securityadmin;
+create or replace role taskadmin;
+
+-- Set the active role to ACCOUNTADMIN before granting the EXECUTE TASK privilege to TASKADMIN
+use role accountadmin;
+grant execute task on account to role taskadmin;
+
+-- Set the active role to SECURITYADMIN to show that this role can grant a role to another role 
+use role securityadmin;
+grant role taskadmin to role sysadmin;
+
+-- Create a task for handling slowly changing dimension (SCD) in the Channel_table with fully qualified names
+CREATE OR REPLACE TASK youtube_db.channel_scd_task 
+WAREHOUSE = COMPUTE_WH 
+SCHEDULE = '1 minute'
+ERROR_ON_NONDETERMINISTIC_MERGE = FALSE
+AS
+CALL youtube_db.schema_name.channel_scd_demo();
+
+
+-- Create a task for handling slowly changing dimension (SCD) in the Video_table
+create or replace task video_scd_task 
+warehouse = COMPUTE_WH 
+schedule = '1 minute'
+ERROR_ON_NONDETERMINISTIC_MERGE=FALSE
+as
+call video_scd_demo();
+
+-- Create a task for handling slowly changing dimension (SCD) in the Comments_table
+create or replace task comments_scd_task 
+warehouse = COMPUTE_WH 
+schedule = '1 minute'
+ERROR_ON_NONDETERMINISTIC_MERGE=FALSE
+as
+call comments_scd_demo();
+    
+-- Show all tasks
+show tasks;
+
+-- To start a task, use 'resume'. To stop a task, use 'suspend'.
+alter task channel_scd_task resume;
+alter task video_scd_task resume;
+alter task comments_scd_task resume;
+
+alter task channel_scd_task suspend;
+alter task video_scd_task suspend;
+alter task comments_scd_task suspend;
+
+
+INSERT INTO youtube_db.public.Channel_table
+SELECT kind, Id, Playlist_Id, Title, Description, Published_At, Country, View_Count, Subscriber_Count, Video_Count, current_timestamp()
+FROM youtube_db.public.Channel_raw_table;
+
+INSERT INTO youtube_db.public.Video_table
+SELECT Channel_Id, Video_Id, Published_At, Title, Description, Category_Id, View_Count, Like_Count, Comment_Count, current_timestamp()
+FROM youtube_db.public.Video_raw_table;
+
+INSERT INTO youtube_db.public.Comments_table
+SELECT Channel_Id, Video_Id, Comments, current_timestamp()
+FROM youtube_db.public.Comments_raw_table;
